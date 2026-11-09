@@ -1,0 +1,26 @@
+---
+# yamllint configuration — https://yamllint.readthedocs.io
+extends: default
+
+ignore: |
+  # Helm templates contain Go templating and are not valid YAML until rendered;
+  # they are validated with `helm lint` / `helm template` instead.
+  gitops/charts/*/templates/
+  **/.terraform/
+
+rules:
+  document-start: disable
+  line-length:
+    max: 160
+    level: warning
+  truthy:
+    allowed-values: ["true", "false", "on"]
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable
+  indentation:
+    spaces: consistent
+    indent-sequences: whatever
+  braces:
+    max-spaces-inside: 1

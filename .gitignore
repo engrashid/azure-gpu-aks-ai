@@ -1,6 +1,5 @@
 # Terraform
 **/.terraform/
-**/.terraform.lock.hcl
 *.tfstate
 *.tfstate.backup
 *.tfplan
@@ -28,3 +27,6 @@ terraform.tfvars
 .vscode/
 *.swp
 *.swo
+
+# Lock files are committed for root modules only
+**/modules/**/.terraform.lock.hcl

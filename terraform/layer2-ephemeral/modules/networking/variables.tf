@@ -42,6 +42,9 @@ variable "spoke_vnet_cidr" {
 
 # ── Layer 1 resource IDs passed in from terraform_remote_state ─────────────────
 
+# Reserved for the ACR private endpoint in private-endpoints.tf, which is
+# commented out because Private Link requires the ACR Premium SKU.
+# tflint-ignore: terraform_unused_declarations
 variable "acr_id" {
   description = "Resource ID of the Layer 1 Azure Container Registry"
   type        = string

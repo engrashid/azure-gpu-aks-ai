@@ -1,4 +1,7 @@
 resource "azurerm_container_registry" "this" {
+  # checkov:skip=CKV_AZURE_237:Dedicated data endpoints require Premium SKU; this stack uses Basic for cost
+  # checkov:skip=CKV_AZURE_163:Defender for Containers image scanning is a subscription-level plan, not an ACR setting
+  # checkov:skip=CKV_AZURE_139:Private Link for ACR requires Premium SKU; pull access is restricted by RBAC (AcrPull) and admin user is disabled
   name                          = var.name
   resource_group_name           = var.resource_group_name
   location                      = var.location
