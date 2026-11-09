@@ -69,7 +69,7 @@ via port-forward from your laptop:
 kubectl port-forward svc/argocd-server -n argocd 8080:80
 ```
 
-Then open: **http://localhost:8080**
+Then open: **<http://localhost:8080>**
 
 Keep this terminal open while using the UI. Port-forward terminates when
 you close the terminal.
@@ -111,6 +111,7 @@ kubectl describe application workloads-root -n argocd
 ```
 
 Expected initial state after bootstrap:
+
 - `platform-root`: **Synced / Healthy** (or **Synced / Suspended** if
   `gitops/platform-apps/` is empty — this is normal)
 - `workloads-root`: **Synced / Healthy** (or **Synced / Suspended** if
@@ -151,6 +152,7 @@ argocd app sync workloads-root
 `authentication required` or `403 Forbidden`.
 
 **Fix:**
+
 ```bash
 # Generate a new PAT in Azure DevOps / GitHub
 export AZDO_PAT=<new-pat>

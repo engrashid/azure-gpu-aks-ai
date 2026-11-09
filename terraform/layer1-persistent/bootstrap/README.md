@@ -127,6 +127,10 @@ terraform apply layer1.tfplan
 
 The plan should show **no changes** for the four imported resources and will
 create ACR, Key Vault, model storage, and the managed identity.
+
+Example outputs after apply:
+
+```text
 acr_id = "/subscriptions/<subscription-id>/resourceGroups/rg-qwen-persistent-dev/providers/Microsoft.ContainerRegistry/registries/acrqwendev"
 acr_login_server = "acrqwendev.azurecr.io"
 acr_name = "acrqwendev"
@@ -145,6 +149,8 @@ vllm_identity_client_id = "<vllm-identity-client-id>"
 vllm_identity_id = "/subscriptions/<subscription-id>/resourceGroups/rg-qwen-persistent-dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/mi-qwen-vllm-dev"
 vllm_identity_principal_id = "<vllm-identity-principal-id>"
 vllm_identity_tenant_id = "<tenant-id>"
+```
+
 ---
 
 ## Step 4 — Migrate local state to the remote Azure backend

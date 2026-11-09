@@ -94,11 +94,13 @@ will inject the projected token volume and the required environment variables.
 When a developer's laptop IP changes:
 
 1. Find the new IP:
+
    ```bash
    curl -s https://api.ipify.org
    ```
 
 2. Update `terraform.tfvars`:
+
    ```hcl
    api_server_authorized_ip_ranges = [
      "203.0.113.42/32",   # alice laptop
@@ -107,10 +109,11 @@ When a developer's laptop IP changes:
    ```
 
 3. Apply the change:
+
    ```bash
    terraform apply -var-file="terraform.tfvars" -target='module.aks.azurerm_kubernetes_cluster.main'
    ```
-   
+
    The `-target` flag applies only the cluster update, which takes ~30 seconds
    and does not cause node pool disruption.
 

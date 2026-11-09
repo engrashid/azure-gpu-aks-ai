@@ -21,6 +21,7 @@ GitOps-managed from `gitops/workload-apps/qwen-api.yaml`.
 ### Manual secrets (not in GitOps — must be created once per cluster)
 
 **Blob CSI storage account key secret:**
+
 ```bash
 STORAGE_KEY=$(az storage account keys list \
   --resource-group rg-qwen-persistent-dev \
@@ -35,6 +36,7 @@ kubectl create secret generic azure-blob-csi-secret \
 
 **oauth2-proxy AAD credentials secret:**
 The AAD app is `qwen-aks-dev-oauth2` (client ID `<oauth2-client-id>`).
+
 ```bash
 # Generate a new client secret if needed:
 CLIENT_SECRET=$(az ad app credential reset \
@@ -121,6 +123,7 @@ kubectl logs -f -n gpu-inference \
 ```
 
 Expected log sequence:
+
 ```
 INFO  Initializing an LLM engine ...
 INFO  Loading model weights ...
@@ -210,6 +213,7 @@ kubectl scale deployment/qwen-api -n gpu-inference --replicas=1
 ### Adjust KEDA parameters
 
 Edit `gitops/envs/dev/qwen-values.yaml`:
+
 ```yaml
 keda:
   minReplicaCount: 1    # keep GPU node warm (increases cost)

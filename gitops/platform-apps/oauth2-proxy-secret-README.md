@@ -1,6 +1,7 @@
 # oauth2-proxy Credentials — Manual One-Time Setup
 
 oauth2-proxy requires three credentials that **must never be committed to git**:
+
 - Azure AD Application client ID
 - Azure AD Application client secret
 - A random cookie-signing secret
@@ -37,6 +38,7 @@ kubectl create secret generic oauth2-proxy-creds \
 ```
 
 Verify:
+
 ```bash
 kubectl get secret oauth2-proxy-creds -n oauth2-proxy
 # Expected: Opaque secret with 3 keys

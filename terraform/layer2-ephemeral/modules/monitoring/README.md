@@ -36,11 +36,13 @@ Watch for `quotaNextResetTime` — ingestion resumes at that timestamp.
 ### Raising or removing the cap
 
 To raise to 10 GB/day:
+
 ```hcl
 daily_quota_gb = 10
 ```
 
 To remove the cap entirely (unlimited, pay-per-GB):
+
 ```hcl
 daily_quota_gb = -1
 ```
