@@ -11,47 +11,9 @@ A production-style, self-hosted LLM platform on Azure Kubernetes Service: **Qwen
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  user([User browser]) -->|HTTPS| agw[Application Gateway<br/>AGIC + Let's Encrypt]
+![Architecture: vLLM on an AKS T4 GPU pool behind Application Gateway and oauth2-proxy, egress through Azure Firewall, two-layer Terraform](docs/images/architecture.png)
 
-  subgraph Azure["Azure subscription"]
-    subgraph Hub["Hub VNet"]
-      fw[Azure Firewall<br/>FQDN allow-list]
-    end
-
-    subgraph Spoke["Spoke VNet"]
-      agw
-      subgraph AKS["AKS (Azure CNI Overlay, Calico, Entra ID RBAC)"]
-        o2p[oauth2-proxy<br/>Entra ID OIDC]
-        webui[Open WebUI]
-        vllm[vLLM OpenAI API<br/>Qwen2.5-7B AWQ]
-        keda[KEDA]
-        argocd[ArgoCD]
-        gpu[(GPU pool<br/>NC4as_T4_v3, 0..2)]
-      end
-      pe[Private Endpoints]
-    end
-
-    subgraph L1["Layer 1 – persistent"]
-      acr[(ACR)]
-      kv[(Key Vault)]
-      st[(Blob: model weights)]
-      mi[Managed Identity<br/>Workload Identity]
-    end
-
-    law[Log Analytics + Managed Grafana]
-  end
-
-  agw --> o2p --> webui --> vllm
-  vllm -. runs on .-> gpu
-  keda -. scales .-> vllm
-  vllm -->|Blob CSI via PE| st
-  pe --- acr & kv & st
-  AKS -->|UDR: all egress| fw
-  argocd -->|pulls| repo[(This Git repo)]
-  AKS --> law
-```
+Editable source: [`docs/images/architecture.drawio`](docs/images/architecture.drawio) (open in [diagrams.net](https://app.diagrams.net)). Design details: [docs/architecture.md](docs/architecture.md).
 
 ## What's in it
 
