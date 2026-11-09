@@ -1,0 +1,117 @@
+{{- if .Values.networkPolicy.enabled }}
+# Network policy strategy: deny-all for the namespace, then explicit
+# allow rules scoped to the vLLM pod selector.
+#
+# Two policies are required because Kubernetes NetworkPolicy is additive:
+#   1. default-deny — catches any pod not covered by a specific policy.
+#   2. vllm-allow   — opens only the required flows for the vLLM pod.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "qwen-api.fullname" . }}-default-deny
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qwen-api.labels" . | nindent 4 }}
+spec:
+  # Empty podSelector matches ALL pods in the namespace.
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # No ingress or egress rules: deny everything by default.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "qwen-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qwen-api.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "qwen-api.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # ── Allow: ingress-nginx → vLLM port 8000 ─────────────────────────────
+    # ingress-nginx is the only allowed caller. All other pods and external
+    # traffic that bypasses the ingress controller are denied.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8000
+          protocol: TCP
+
+    # ── Allow: open-webui → vLLM port 8000 ───────────────────────────────
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ai-chat
+      ports:
+        - port: 8000
+          protocol: TCP
+
+    # ── Allow: KEDA metrics scrape (same namespace, metrics-server) ────────
+    # KEDA's metrics adapter needs to reach the pod for CPU/custom metrics.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda
+      ports:
+        - port: 8000
+          protocol: TCP
+
+  egress:
+    # ── Allow: DNS resolution ──────────────────────────────────────────────
+    # kube-dns (CoreDNS) in kube-system resolves cluster service names and
+    # private DNS zones for the Blob / Key Vault private endpoints.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+    # ── Allow: Azure private endpoints (Blob Storage, Key Vault) ──────────
+    # The PE subnet hosts the private endpoints for stqwenmodelsdev and
+    # kv-qwen-dev-*. Traffic flows to the FUSE mount helper and any direct
+    # Azure SDK calls on port 443.
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.privateEndpointCIDR }}
+      ports:
+        - port: 443
+          protocol: TCP
+
+    # ── Allow: AKS API server + AAD OIDC token endpoint ───────────────────
+    # Required for:
+    #   - Azure Workload Identity token refresh (AAD OIDC: login.microsoftonline.com)
+    #   - KEDA ScaledObject metrics registration
+    # Tighten apiServerCIDR to the exact API server IP/32 post-bootstrap:
+    #   kubectl cluster-info | grep 'control plane' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.apiServerCIDR }}
+            {{- if ne .Values.networkPolicy.apiServerCIDR "0.0.0.0/0" }}
+            {{- else }}
+            # When using 0.0.0.0/0, exclude RFC-1918 ranges so lateral movement
+            # to other cluster workloads is still denied. The Azure Firewall
+            # enforces egress policy for the remaining public destinations.
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+            {{- end }}
+      ports:
+        - port: 443
+          protocol: TCP
+{{- end }}

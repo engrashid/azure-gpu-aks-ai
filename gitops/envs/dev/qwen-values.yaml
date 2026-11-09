@@ -1,0 +1,56 @@
+# qwen-api dev environment overrides
+#
+# Only values that differ from gitops/charts/qwen-api/values.yaml are set here.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# REQUIRED — set storage.csi.clientID before deploying:
+#
+#   cd terraform/layer1-persistent
+#   terraform output -raw vllm_identity_client_id
+#
+# Paste the UUID output below. This is the client ID of the vLLM
+# user-assigned managed identity that has Storage Blob Data Reader on
+# the model storage account. Not a secret — it is safe to commit.
+# ─────────────────────────────────────────────────────────────────────────────
+
+storage:
+  csi:
+    clientID: "<vllm-identity-client-id>"
+    # Secret created manually: kubectl create secret generic azure-blob-csi-secret
+    # -n gpu-inference --from-literal=azurestorageaccountname=stqwenmodelsdev
+    # --from-literal=azurestorageaccountkey=<key>
+    # Bypasses listKeys management-plane call (vLLM identity has data-plane only).
+    accountKeySecretName: "azure-blob-csi-secret"
+
+ingress:
+  hosts:
+    - host: qwen.dev.internal
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: qwen-internal-tls
+      hosts:
+        - qwen.dev.internal
+
+replicaCount: 1
+
+keda:
+  enabled: true
+  # KEDA rejects CPU trigger + minReplicaCount=0 (CPU metrics unavailable at 0 pods).
+  # Set to 1 until an external metric (HTTP/Prometheus) replaces the CPU trigger.
+  minReplicaCount: 1
+  maxReplicaCount: 2
+  cooldownPeriod: 600
+
+# Dev: reduce startup budget slightly — node is often already warm
+# after first deployment. Revert to 40 if the node pool scales to zero.
+probes:
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 60
+    periodSeconds: 15
+    timeoutSeconds: 10
+    failureThreshold: 40

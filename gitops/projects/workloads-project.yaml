@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: workloads
+  namespace: argocd
+  labels:
+    managed-by: bootstrap-script
+    app.kubernetes.io/part-of: argocd-bootstrap
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: AI inference workloads (vLLM, model serving, supporting APIs)
+
+  # Workloads are scoped to inference and application namespaces only.
+  # No access to argocd, kube-system, or platform namespaces.
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: gpu-inference
+    - server: https://kubernetes.default.svc
+      namespace: ai-chat
+    - server: https://kubernetes.default.svc
+      namespace: mfe
+    - server: https://kubernetes.default.svc
+      namespace: backend-apis
+
+  sourceRepos:
+    - '*'
+
+  # Workloads may create their own Namespace objects (CreateNamespace=true
+  # in syncOptions), but cannot create arbitrary cluster-scoped resources.
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: ''
+      kind: PersistentVolume
+    - group: storage.k8s.io
+      kind: StorageClass
+
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+  roles:
+    - name: workload-admin
+      description: Full access within workload namespaces
+      policies:
+        - p, proj:workloads:workload-admin, applications, *, workloads/*, allow
+      groups:
+        # Replace with the object ID of your AKS Admins AAD group.
+        # Terraform output: terraform -chdir=terraform/layer1-persistent output -raw aks_admins_group_object_id
+        - <AAD_AKS_ADMINS_GROUP_OBJECT_ID>

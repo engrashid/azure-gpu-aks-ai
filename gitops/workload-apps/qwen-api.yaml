@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: qwen-api
+  namespace: argocd
+  labels:
+    managed-by: argocd
+    app.kubernetes.io/part-of: workloads
+  annotations:
+    # Wave 1: after the platform wave (ingress-nginx, cert-manager, KEDA)
+    # has installed CRDs and controllers needed by this chart.
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: workloads
+
+  source:
+    repoURL: https://github.com/engrashid/azure-gpu-aks-ai.git
+    targetRevision: main
+    path: gitops/charts/qwen-api
+    helm:
+      releaseName: qwen-api
+      # Path is relative to the source path (gitops/charts/qwen-api).
+      # ../../envs/dev/ resolves to gitops/envs/dev/.
+      valueFiles:
+        - ../../envs/dev/qwen-values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gpu-inference
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  # KEDA controls spec.replicas at runtime.
+  # Without this, ArgoCD would detect drift on every KEDA scale event
+  # and try to revert the replica count to the value in values.yaml.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas

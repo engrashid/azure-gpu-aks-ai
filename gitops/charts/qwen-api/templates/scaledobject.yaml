@@ -1,0 +1,30 @@
+{{- if .Values.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "qwen-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qwen-api.labels" . | nindent 4 }}
+    scaledobject.keda.sh/name: {{ include "qwen-api.fullname" . }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "qwen-api.fullname" . }}
+
+  # minReplicaCount: 0 enables scale-to-zero. First request after idle will
+  # trigger a cold start (GPU node provision + model load: ~3–10 min).
+  minReplicaCount: {{ .Values.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.keda.maxReplicaCount }}
+
+  # Seconds between trigger evaluations.
+  pollingInterval: {{ .Values.keda.pollingInterval }}
+
+  # Seconds of inactivity before scaling down to minReplicaCount.
+  # 600s (10 min) prevents thrashing on bursty inference workloads.
+  cooldownPeriod: {{ .Values.keda.cooldownPeriod }}
+
+  triggers:
+    {{- toYaml .Values.keda.triggers | nindent 4 }}
+{{- end }}

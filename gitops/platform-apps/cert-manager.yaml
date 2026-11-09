@@ -1,0 +1,58 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  labels:
+    managed-by: argocd
+    app.kubernetes.io/part-of: platform
+  annotations:
+    # Wave 0: installs CRDs. cert-manager-issuer (wave 2) consumes them.
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  sources:
+    - repoURL: https://charts.jetstack.io
+      chart: cert-manager
+      targetRevision: "v1.16.3"
+      helm:
+        releaseName: cert-manager
+        valueFiles:
+          - $values/gitops/envs/dev/cert-manager-values.yaml
+
+    - repoURL: https://github.com/engrashid/azure-gpu-aks-ai.git
+      ref: values
+      targetRevision: main
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  # caBundle is injected at runtime by the cert-manager webhook; ignore to
+  # prevent ArgoCD from reporting perpetual drift on ValidatingWebhookConfiguration.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+        # AKS injects these matchExpressions into namespaceSelector at the
+        # cluster level to protect system namespaces from webhook admission.
+        - .webhooks[].namespaceSelector.matchExpressions

@@ -1,0 +1,19 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "qwen-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qwen-api.labels" . | nindent 4 }}
+spec:
+  # minAvailable: 0 — allows all pods to be evicted simultaneously.
+  # This is intentional for a single-replica GPU deployment:
+  #   - Node upgrades must not stall waiting for GPU pod drain.
+  #   - Users accept cold-start latency in exchange for cost savings.
+  # Raise to 1 when keda.maxReplicaCount >= 2 and SLA requires continuity.
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "qwen-api.selectorLabels" . | nindent 6 }}
+{{- end }}

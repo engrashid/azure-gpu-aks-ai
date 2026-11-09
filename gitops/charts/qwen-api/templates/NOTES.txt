@@ -1,0 +1,73 @@
+Qwen API — {{ .Chart.AppVersion }} — deployed to {{ .Release.Namespace }}
+
+━━━ Service endpoints ─────────────────────────────────────────────────────────
+
+  OpenAI-compatible API : https://{{ (index .Values.ingress.hosts 0).host }}/v1
+  Health check          : https://{{ (index .Values.ingress.hosts 0).host }}/health
+  Models list           : https://{{ (index .Values.ingress.hosts 0).host }}/v1/models
+
+━━━ First-request cold start ──────────────────────────────────────────────────
+
+  KEDA minReplicaCount={{ .Values.keda.minReplicaCount }} — the deployment scales to zero when idle.
+  The first request after idle triggers a cold start:
+
+    1. AKS provisions a GPU node from zero:    ~5–8 minutes
+    2. Blob CSI mounts model weights:          ~30 seconds
+    3. vLLM loads 5 GiB AWQ weights:           ~2–3 minutes
+
+  Watch the pod come up:
+    kubectl get pods -n {{ .Release.Namespace }} -w
+    kubectl logs -f -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "qwen-api.name" . }}
+
+━━━ Verify GPU allocation ──────────────────────────────────────────────────────
+
+  After the pod is Running:
+    kubectl describe pod -n {{ .Release.Namespace }} \
+      -l app.kubernetes.io/name={{ include "qwen-api.name" . }} \
+      | grep -A5 "Limits:"
+    # Should show:  nvidia.com/gpu: 1
+
+  Check node GPU allocatable:
+    kubectl get nodes -l gpu-type=nvidia-t4
+    kubectl describe node <gpu-node> | grep -A5 "Allocatable:"
+    # Should show:  nvidia.com/gpu: 1
+
+━━━ Test the API ───────────────────────────────────────────────────────────────
+
+  Port-forward (bypasses oauth2-proxy — dev only):
+    kubectl port-forward svc/{{ include "qwen-api.fullname" . }} 8080:8000 -n {{ .Release.Namespace }}
+
+  Health:
+    curl http://localhost:8080/health
+
+  Models:
+    curl http://localhost:8080/v1/models
+
+  Chat completion:
+    curl http://localhost:8080/v1/chat/completions \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "{{ .Values.model.servedModelName }}",
+        "messages": [{"role": "user", "content": "Hello, what is 2+2?"}],
+        "max_tokens": 128,
+        "temperature": 0.7
+      }'
+
+━━━ Ingress (requires VPN / internal network) ─────────────────────────────────
+
+  Internal LB IP: check with
+    kubectl get svc -n ingress-nginx ingress-nginx-controller \
+      -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+
+  Add to /etc/hosts (laptop):
+    <LB_IP>  {{ (index .Values.ingress.hosts 0).host }}
+
+━━━ Troubleshooting ────────────────────────────────────────────────────────────
+
+  Startup taking too long?  Check Blob CSI mount:
+    kubectl describe pvc {{ include "qwen-api.pvcName" . }} -n {{ .Release.Namespace }}
+    kubectl get events -n {{ .Release.Namespace }} --sort-by='.lastTimestamp'
+
+  See full runbooks at:
+    docs/runbooks/qwen-deployment.md
+    docs/runbooks/vllm-troubleshooting.md

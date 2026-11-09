@@ -1,0 +1,63 @@
+# Internal CA chain for aks-qwen-dev
+#
+# Three-step bootstrap applied by the cert-manager-issuer Application (wave 2):
+#
+#   1. selfsigned-bootstrap — a no-op ClusterIssuer that signs certificates
+#      using the key embedded in the Certificate itself (used only once).
+#   2. internal-ca — a self-signed root CA certificate valid for 10 years,
+#      stored as TLS Secret internal-ca-key-pair in the cert-manager namespace.
+#   3. internal-ca-issuer — a ClusterIssuer that uses internal-ca-key-pair
+#      to sign all dev Certificates and IngressTLS certs.
+#
+# Usage in an Ingress or Certificate:
+#   issuerRef:
+#     name: internal-ca-issuer
+#     kind: ClusterIssuer
+#     group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-bootstrap
+  labels:
+    managed-by: argocd
+    app.kubernetes.io/part-of: platform
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: internal-ca
+  namespace: cert-manager
+  labels:
+    managed-by: argocd
+    app.kubernetes.io/part-of: platform
+spec:
+  isCA: true
+  commonName: qwen-internal-ca
+  subject:
+    organizations:
+      - qwen-dev
+  secretName: internal-ca-key-pair
+  # 10-year root CA — rotate manually if the cluster is promoted to production.
+  duration: 87600h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: internal-ca-issuer
+  labels:
+    managed-by: argocd
+    app.kubernetes.io/part-of: platform
+spec:
+  ca:
+    secretName: internal-ca-key-pair

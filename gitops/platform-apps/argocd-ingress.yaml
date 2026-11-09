@@ -1,0 +1,35 @@
+# App Gateway ingress for ArgoCD UI
+# ArgoCD server runs in insecure mode (HTTP); TLS is terminated at App Gateway.
+# Backend: argocd-server NodePort so AGIC uses AKS node IPs (VNet-routable).
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  labels:
+    managed-by: argocd
+    app.kubernetes.io/part-of: platform
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    appgw.ingress.kubernetes.io/ssl-redirect: "false"
+    appgw.ingress.kubernetes.io/request-timeout: "60"
+    appgw.ingress.kubernetes.io/backend-hostname: "argocd.example.com"
+    appgw.ingress.kubernetes.io/health-probe-path: "/healthz"
+spec:
+  ingressClassName: azure-application-gateway
+  tls:
+    - secretName: argocd-server-tls
+      hosts:
+        - argocd.example.com
+  rules:
+    - host: argocd.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80

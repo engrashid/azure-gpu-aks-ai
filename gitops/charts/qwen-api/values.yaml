@@ -1,0 +1,264 @@
+# qwen-api Helm chart default values
+#
+# Override per-environment in gitops/envs/<env>/qwen-values.yaml.
+# All values documented inline.
+
+# ── Image ──────────────────────────────────────────────────────────────────────
+image:
+  repository: vllm/vllm-openai
+  # Pin to an exact release. Check https://hub.docker.com/r/vllm/vllm-openai/tags
+  tag: v0.6.4
+  pullPolicy: IfNotPresent
+
+# ── Replica count ──────────────────────────────────────────────────────────────
+# KEDA overrides this at runtime when keda.enabled=true.
+# ArgoCD is configured to ignore /spec/replicas drift.
+replicaCount: 1
+
+# ── Model configuration ────────────────────────────────────────────────────────
+model:
+  # HuggingFace model ID. Must match the directory name uploaded by the
+  # model-upload script under storage.modelSubPath.
+  name: Qwen/Qwen2.5-7B-Instruct-AWQ
+
+  # AWQ 4-bit quantization. ~5 GiB on disk, fits T4 16 GiB VRAM with
+  # ~10 GiB headroom for KV cache.
+  quantization: awq
+
+  # Maximum context window in tokens. 8192 is safe for T4 VRAM budget.
+  # Increasing this raises KV cache memory usage linearly.
+  maxModelLen: 8192
+
+  # Fraction of GPU memory reserved for the KV cache and model weights.
+  # 0.90 leaves ~1.6 GiB for CUDA runtime overhead on a 16 GiB T4.
+  gpuMemoryUtilization: 0.90
+
+  # "auto" selects float16 on T4 (bfloat16 is unavailable on Turing arch).
+  dtype: auto
+
+  # 7B AWQ on a single T4 does not require tensor parallelism.
+  tensorParallelSize: 1
+
+  # Alias served to clients via GET /v1/models. Keeps client code
+  # stable across model version bumps.
+  servedModelName: qwen
+
+# ── Service account ────────────────────────────────────────────────────────────
+serviceAccount:
+  # Do not create the SA here — it is pre-created by validate-and-test.sh
+  # with the azure.workload.identity/client-id annotation bound to the
+  # Layer 1 vLLM managed identity.
+  create: false
+  name: vllm-sa
+
+# ── Model storage (Azure Blob CSI) ─────────────────────────────────────────────
+storage:
+  csi:
+    driver: blob.csi.azure.com
+    # Storage account name from Layer 1 Terraform output: model_storage_account_name
+    storageAccountName: stqwenmodelsdev
+    containerName: model-weights
+    # Client ID of the vLLM user-assigned managed identity.
+    # Obtain from: terraform -chdir=terraform/layer1-persistent output -raw vllm_identity_client_id
+    # Set this in gitops/envs/dev/qwen-values.yaml — never hardcode here.
+    clientID: ""
+    # Resource group that owns the storage account (Layer 1 RG).
+    resourceGroup: rg-qwen-persistent-dev
+    # Blob FUSE2 protocol: better performance than the legacy FUSE driver.
+    protocol: fuse2
+    # Name of a Kubernetes secret in the same namespace that holds
+    # azurestorageaccountname and azurestorageaccountkey. When set, the blob
+    # CSI driver uses the account key directly and skips the listKeys management
+    # plane call (which the vLLM workload identity is not permitted to make).
+    # Leave empty to rely on workload-identity MSI (requires listKeys on the SA).
+    accountKeySecretName: ""
+
+  # Mount point inside the container.
+  mountPath: /mnt/models
+
+  # Directory under mountPath where the model weights are stored.
+  # Must match the path used by the model-upload script (Prompt 9).
+  # Expected layout: /mnt/models/qwen2.5-7b-instruct-awq/
+  modelSubPath: qwen2.5-7b-instruct-awq
+
+# ── GPU scheduling ─────────────────────────────────────────────────────────────
+gpu:
+  count: 1
+
+  # Labels on the GPU node pool as set by Terraform.
+  # NOTE: "accelerator" is a reserved AKS label key — the Terraform nodepool
+  # uses "gpu-type" instead. Verify with: kubectl get nodes -L gpu-type,role
+  nodeSelector:
+    gpu-type: nvidia-t4
+    workload: llm
+    role: gpu
+
+  # Taint set on the GPU node pool to prevent non-GPU workloads from landing.
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Equal
+      value: "present"
+      effect: NoSchedule
+
+# ── Resources ──────────────────────────────────────────────────────────────────
+# gpu request/limit must equal gpu.count.
+# memory limit set to 24Gi (model 5 GiB + KV cache ~10 GiB + overhead).
+resources:
+  requests:
+    cpu: "2"
+    memory: 16Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "4"
+    memory: 24Gi
+    nvidia.com/gpu: "1"
+
+# ── Health probes ──────────────────────────────────────────────────────────────
+probes:
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    # 60s initial delay: allows the GPU node to provision from scale-zero
+    # and the Blob CSI driver to mount model weights before the first check.
+    initialDelaySeconds: 60
+    periodSeconds: 15
+    timeoutSeconds: 10
+    # 40 failures × 15s period = 600s (10 minutes) total startup budget.
+    # Budget breakdown:
+    #   - AKS GPU node cold-start from zero:  5–8 min
+    #   - Blob CSI FUSE mount:               ~30s
+    #   - vLLM loading 5 GiB AWQ weights:    ~2–3 min
+    # Reduce only if the node is always warm (KEDA cooldownPeriod kept short).
+    failureThreshold: 40
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# ── Service ────────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+# ── Ingress ────────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+
+  annotations:
+    # cert-manager issues a TLS cert from the internal self-signed CA.
+    cert-manager.io/cluster-issuer: internal-ca-issuer
+
+    # Generous timeouts for streaming LLM inference (completions can run
+    # for several minutes on long outputs).
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+
+    # oauth2-proxy: every request is validated before reaching vLLM.
+    # Port 4180 is the oauth2-proxy service port.
+    nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local:4180/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-signin: "https://qwen.dev.internal/oauth2/start?rd=$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Access-Token"
+
+  hosts:
+    - host: qwen.dev.internal
+      paths:
+        - path: /
+          pathType: Prefix
+
+  tls:
+    - secretName: qwen-internal-tls
+      hosts:
+        - qwen.dev.internal
+
+# ── KEDA autoscaling ───────────────────────────────────────────────────────────
+keda:
+  enabled: true
+
+  # Scale to zero when no requests for cooldownPeriod seconds.
+  # Pods will cold-start when a request arrives (~3–10 min on GPU node scale-up).
+  minReplicaCount: 0
+  maxReplicaCount: 2
+
+  # Seconds between trigger evaluations.
+  pollingInterval: 30
+
+  # Seconds of idle before scaling down to minReplicaCount.
+  # 10 minutes prevents thrashing on bursty inference patterns.
+  cooldownPeriod: 600
+
+  # CPU utilization trigger is a placeholder for experimental phase.
+  # Replace with Prometheus HTTP request rate or Service Bus queue depth
+  # once observability stack is deployed.
+  triggers:
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "70"
+
+# ── Network policy ─────────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: true
+
+  # CIDR of the spoke private-endpoint subnet where Azure storage and Key Vault
+  # private endpoints are deployed. Find it via:
+  #   terraform -chdir=terraform/layer2-ephemeral output -json | jq '.pe_subnet_id'
+  # Default matches the standard 10.1.x.x hub-spoke layout.
+  privateEndpointCIDR: "10.1.2.0/24"
+
+  # CIDR for egress to the AKS API server (needed for workload identity
+  # OIDC token projection and KEDA metrics). Tighten to the exact
+  # public IP of the API server post-bootstrap:
+  #   kubectl cluster-info | grep 'control plane'
+  # Using 0.0.0.0/0 scoped to port 443 is acceptable when combined with
+  # the Azure Firewall application rules that restrict actual destinations.
+  apiServerCIDR: "0.0.0.0/0"
+
+# ── Pod Disruption Budget ──────────────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  # 0: allow full disruption (single GPU pod; node upgrades must proceed).
+  # Raise to 1 when maxReplicaCount >= 2 and SLA requires continuous availability.
+  minAvailable: 0
+
+# ── Pod metadata ───────────────────────────────────────────────────────────────
+podAnnotations: {}
+
+podLabels:
+  app.kubernetes.io/name: qwen-api
+  app.kubernetes.io/component: inference
+
+# ── Graceful shutdown ──────────────────────────────────────────────────────────
+# vLLM drains in-flight requests before exit. 60s covers long-running
+# completions; SIGKILL fires if drain takes longer.
+terminationGracePeriodSeconds: 60
+
+# ── Extra environment variables ────────────────────────────────────────────────
+# Injected via the qwen-api-config ConfigMap. Override in env-specific values.
+extraEnv:
+  PYTORCH_CUDA_ALLOC_CONF: "max_split_size_mb:512"
+  VLLM_LOGGING_LEVEL: "INFO"
+  # Suppress HuggingFace Hub warnings when running offline.
+  HF_DATASETS_OFFLINE: "1"
+  # Disable tokenizers parallelism to avoid fork/thread conflicts inside vLLM.
+  TOKENIZERS_PARALLELISM: "false"
+
+# ── Name overrides ─────────────────────────────────────────────────────────────
+nameOverride: ""
+fullnameOverride: ""

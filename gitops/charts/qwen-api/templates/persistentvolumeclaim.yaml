@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "qwen-api.pvcName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qwen-api.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: blob-csi-qwen
+  # Static binding: reference the PV by name rather than relying on dynamic
+  # provisioning. The StorageClass provisioner is kubernetes.io/no-provisioner
+  # so no automatic PV is created.
+  volumeName: {{ include "qwen-api.pvName" . }}
+  resources:
+    requests:
+      storage: 50Gi

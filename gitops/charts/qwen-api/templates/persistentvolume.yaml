@@ -1,0 +1,70 @@
+# Static provisioning for Azure Blob CSI with workload identity auth.
+#
+# Three resources in sync:
+#   StorageClass  — named class for static binding (no dynamic provisioner)
+#   PersistentVolume  — cluster-scoped, backed by the Blob container
+#   (PVC is in persistentvolumeclaim.yaml)
+#
+# Auth flow: the Blob CSI node plugin reads the workload identity token
+# projected into the pod by the Azure Workload Identity webhook, exchanges
+# it for an Azure AD token, and uses that to acquire a short-lived SAS token
+# for the Blob container. No storage account key is used.
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: blob-csi-qwen
+  labels:
+    {{- include "qwen-api.labels" . | nindent 4 }}
+# kubernetes.io/no-provisioner: static provisioning only.
+# Dynamic provisioning via blob.csi.azure.com would bypass the workload
+# identity setup; static provisioning lets us set clientID explicitly.
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: Immediate
+reclaimPolicy: Retain
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  # PVs are cluster-scoped; name encodes release to support parallel installs.
+  name: {{ include "qwen-api.pvName" . }}
+  labels:
+    {{- include "qwen-api.labels" . | nindent 4 }}
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: blob-csi-qwen
+
+  mountOptions:
+    # allow_other: lets non-root processes (container UID) access the mount.
+    - -o allow_other
+    # Cache file attributes for 2 minutes to reduce FUSE metadata round-trips
+    # on large model file reads.
+    - --file-cache-timeout-in-seconds=120
+    # Pre-read next blocks during sequential weight loading.
+    - --use-attr-cache=true
+
+  csi:
+    driver: {{ .Values.storage.csi.driver }}
+    readOnly: true
+    # volumeHandle must be unique per PV. Encodes account + container + release.
+    volumeHandle: {{ printf "%s_%s_%s" .Values.storage.csi.storageAccountName .Values.storage.csi.containerName (include "qwen-api.fullname" .) }}
+    volumeAttributes:
+      resourceGroup: {{ .Values.storage.csi.resourceGroup }}
+      storageAccount: {{ .Values.storage.csi.storageAccountName }}
+      containerName: {{ .Values.storage.csi.containerName }}
+      {{- if not .Values.storage.csi.accountKeySecretName }}
+      # Only set when using workload identity (MSI) auth. Omitted when
+      # nodeStageSecretRef is used — clientID triggers a listKeys management
+      # plane call which the vLLM identity (Storage Blob Data Reader only) rejects.
+      clientID: {{ .Values.storage.csi.clientID | quote }}
+      {{- end }}
+      protocol: {{ .Values.storage.csi.protocol }}
+    {{- if .Values.storage.csi.accountKeySecretName }}
+    nodeStageSecretRef:
+      name: {{ .Values.storage.csi.accountKeySecretName }}
+      namespace: {{ .Release.Namespace }}
+    {{- end }}

@@ -1,0 +1,70 @@
+# cert-manager Helm values — aks-qwen-dev
+#
+# Single replica (experimental). Scale replicaCount + webhook.replicaCount
+# to 2 for production HA.
+
+# Install CRDs as part of the Helm release so ArgoCD can track and
+# diff them. Do NOT use kubectl apply for CRDs separately.
+installCRDs: true
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector:
+  role: user
+
+tolerations: []
+
+webhook:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  nodeSelector:
+    role: user
+  tolerations: []
+
+cainjector:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+  nodeSelector:
+    role: user
+  tolerations: []
+
+startupapicheck:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  nodeSelector:
+    role: user
+  tolerations: []
+
+prometheus:
+  enabled: false
+
+extraArgs:
+  # Use only the recursive nameservers for DNS-01 challenges.
+  # Prevents split-horizon DNS from confusing ACME verification.
+  - "--dns01-recursive-nameservers-only"
+  - "--dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53"

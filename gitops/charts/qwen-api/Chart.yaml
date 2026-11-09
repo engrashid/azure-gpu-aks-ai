@@ -1,0 +1,14 @@
+apiVersion: v2
+name: qwen-api
+description: Qwen2.5-7B-Instruct-AWQ inference via vLLM on AKS GPU (NC4as_T4_v3)
+type: application
+version: 0.1.0
+appVersion: "0.6.4"
+keywords:
+  - llm
+  - vllm
+  - qwen
+  - gpu
+  - inference
+maintainers:
+  - name: platform-team

@@ -1,0 +1,139 @@
+# ArgoCD Helm install values — aks-qwen-dev (experimental)
+#
+# Access: port-forward only (no LoadBalancer, no Ingress).
+# TLS: disabled for dev — add cert-manager + Ingress in a later phase.
+# SSO: disabled — local admin account only for experimental phase.
+# HA: disabled — single replica of each component (dev subscription quotas).
+
+global:
+  domain: argocd.example.com
+
+# ── Server ─────────────────────────────────────────────────────────────────────
+server:
+  replicas: 1
+
+  service:
+    type: NodePort
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ── Application controller ─────────────────────────────────────────────────────
+controller:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+# ── Repo server ────────────────────────────────────────────────────────────────
+repoServer:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ── ApplicationSet controller ──────────────────────────────────────────────────
+applicationSet:
+  enabled: true
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# ── Notifications controller ───────────────────────────────────────────────────
+# Disabled for experimental phase. Enable when alerting is required.
+notifications:
+  enabled: false
+
+# Redis HA disabled for experimental — single instance is sufficient.
+redis-ha:
+  enabled: false
+
+# Disable the redis-secret-init pre-install hook Job.
+# This Job generates a random Redis password; it is not needed for a dev
+# cluster using insecure mode (server.insecure: true) with no external access.
+redisSecretInit:
+  enabled: false
+
+# ── Dex (SSO) ─────────────────────────────────────────────────────────────────
+# Disabled — local admin account only. Enable with AzureAD OIDC in prod phase.
+dex:
+  enabled: false
+
+# ── Redis ──────────────────────────────────────────────────────────────────────
+redis:
+  # ArgoCD 9.x defaults to ecr-public.aws.com which routes blobs via CloudFront.
+  # Override to docker.io so Azure Firewall's existing docker.io rule applies.
+  image:
+    repository: docker.io/library/redis
+    tag: "8.2.3-alpine"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# ── ArgoCD configuration ───────────────────────────────────────────────────────
+configs:
+  params:
+    # Serve over plain HTTP — safe for port-forward; add TLS via Ingress later.
+    server.insecure: "true"
+
+  cm:
+    # How often ArgoCD polls the git repo for changes.
+    timeout.reconciliation: "180s"
+
+    # Label key ArgoCD stamps on every managed resource (default shown
+    # explicitly so it survives chart upgrades that change defaults).
+    application.instanceLabelKey: argocd.argoproj.io/instance
+
+    # Resource tracking method: label (default) is simplest for experimental.
+    application.resourceTrackingMethod: label
+
+    # Suppress caBundle drift globally — cert-manager-cainjector and KEDA
+    # inject caBundle at runtime; ArgoCD should not flag this as OutOfSync.
+    # AKS injects label selectors into webhook namespaceSelectors to protect
+    # system namespaces. cert-manager-cainjector injects caBundle at runtime.
+    # Suppress both to prevent perpetual OutOfSync on AKS clusters.
+    resource.customizations.ignoreDifferences.admissionregistration.k8s.io_ValidatingWebhookConfiguration: |
+      jqPathExpressions:
+        - '.webhooks[]?.clientConfig.caBundle'
+        - '.webhooks[]?.namespaceSelector.matchExpressions'
+    resource.customizations.ignoreDifferences.admissionregistration.k8s.io_MutatingWebhookConfiguration: |
+      jqPathExpressions:
+        - '.webhooks[]?.clientConfig.caBundle'
+        - '.webhooks[]?.namespaceSelector.matchExpressions'
+
+  # rbac.policy.default controls what unauthenticated / low-privilege users
+  # see. Blank = no default access.
+  rbac:
+    policy.default: ""
+    policy.csv: |
+      p, role:admin, applications, *, */*, allow
+      p, role:admin, clusters,     *, *,    allow
+      p, role:admin, repositories, *, *,    allow
+      p, role:admin, projects,     *, *,    allow
+      g, admin, role:admin

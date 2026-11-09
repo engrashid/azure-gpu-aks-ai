@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: open-webui
+  namespace: argocd
+  labels:
+    managed-by: argocd
+    app.kubernetes.io/part-of: workloads
+  annotations:
+    # Wave 1: after platform wave (cert-manager, AGIC addon) is ready.
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: workloads
+
+  source:
+    repoURL: https://github.com/engrashid/azure-gpu-aks-ai.git
+    targetRevision: main
+    path: gitops/charts/open-webui
+    helm:
+      releaseName: open-webui
+      valueFiles:
+        - ../../envs/dev/open-webui-values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ai-chat
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

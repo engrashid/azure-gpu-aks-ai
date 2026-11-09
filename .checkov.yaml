@@ -1,0 +1,78 @@
+skip-check:
+  # ── Azure Firewall Basic tier ─────────────────────────────────────────────────
+  # IDPS and threat intelligence mode require Premium SKU — not supported on Basic
+  - CKV_AZURE_220
+  - CKV_AZURE_216
+
+  # ── Subnet NSG association ────────────────────────────────────────────────────
+  # AzureFirewallManagementSubnet: Azure prohibits attaching an NSG to this subnet
+  # AzureBastionSubnet: dedicated NSG exists; checkov does not resolve the association
+  - CKV2_AZURE_31
+
+  # ── AzureRM v4 attribute rename (false positive) ──────────────────────────────
+  # EncryptionAtHost requires explicit subscription feature registration
+  # (az feature register --namespace Microsoft.Compute --name EncryptionAtHost)
+  # — not enabled on this subscription
+  - CKV_AZURE_227
+
+  # ── Key Vault purge protection ────────────────────────────────────────────────
+  # purge_protection_enabled = false is intentional — dev environment requires
+  # destroy/recreate cycles within the soft-delete retention window
+  - CKV_AZURE_42
+  - CKV_AZURE_110
+
+  # ── Key Vault network access ──────────────────────────────────────────────────
+  # Public access is required during Terraform operations; Layer 2 adds a private
+  # endpoint and can lock down public access post-deployment
+  - CKV_AZURE_189
+  - CKV_AZURE_109
+
+  # ── Key Vault private endpoint ────────────────────────────────────────────────
+  # Private endpoint is provisioned in Layer 2 (modules/networking/private-endpoints.tf)
+  - CKV2_AZURE_32
+
+  # ── Storage: private endpoints ────────────────────────────────────────────────
+  # tfstate SA must stay publicly accessible for the Terraform remote backend;
+  # model storage PE is provisioned in Layer 2
+  - CKV2_AZURE_33
+
+  # ── Storage: shared key authorization ────────────────────────────────────────
+  # tfstate SA: required for azurerm backend non-AAD fallback access;
+  # model storage: required for Blob CSI driver on AKS nodes
+  - CKV2_AZURE_40
+
+  # ── Storage: SAS expiration policy ───────────────────────────────────────────
+  # No SAS tokens are issued in this stack; shared key + managed identity used
+  - CKV2_AZURE_41
+
+  # ── Storage: blob logging ─────────────────────────────────────────────────────
+  # Logging is configured via a dynamic blob_properties block; checkov's static
+  # analyser cannot resolve dynamic blocks and reports a false positive
+  - CKV2_AZURE_21
+
+  # ── Storage: queue service logging ───────────────────────────────────────────
+  # No queue service is used in this stack
+  - CKV_AZURE_33
+
+  # ── Storage: replication type ─────────────────────────────────────────────────
+  # LRS is intentional for dev/experimental — cost optimisation, not prod
+  - CKV_AZURE_206
+
+  # ── Storage: public blob access ───────────────────────────────────────────────
+  # allow_nested_items_to_be_public = false on all accounts; checkov false positive
+  - CKV_AZURE_59
+
+  # ── Storage / KV: customer-managed key encryption ────────────────────────────
+  # CMK requires a Disk Encryption Set and additional Key Vault configuration —
+  # out of scope for this experimental stack
+  - CKV2_AZURE_1
+
+  # ── ACR: enterprise/Premium-only features ────────────────────────────────────
+  # Geo-replication: single-region dev deployment
+  - CKV_AZURE_165
+  # Zone redundancy: Premium supports it but adds cost; not required for dev
+  - CKV_AZURE_233
+  # Image signing (Notary/cosign): requires additional tooling, out of scope
+  - CKV_AZURE_164
+  # Image quarantine: ACR Enterprise feature, not available on standard Premium
+  - CKV_AZURE_166

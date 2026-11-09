@@ -1,0 +1,9 @@
+# open-webui dev environment overrides
+# Once staging cert validates, change certIssuer to letsencrypt-prod.
+
+ingress:
+  certIssuer: letsencrypt-prod
+
+extraEnv:
+  ENABLE_SIGNUP: "true"
+  DEFAULT_USER_ROLE: "pending"

@@ -1,0 +1,39 @@
+# Copy to terraform.tfvars and fill in every value.
+# Never commit terraform.tfvars — it contains sensitive object IDs.
+
+# ── Azure identity ─────────────────────────────────────────────────────────────
+subscription_id = "00000000-0000-0000-0000-000000000000"
+tenant_id       = "00000000-0000-0000-0000-000000000000"
+
+# ── AKS API server allowlist ───────────────────────────────────────────────────
+# Note: AAD group IDs are no longer needed here — they are created by Layer 1
+# (modules/groups) and consumed automatically via terraform_remote_state.
+# Add each developer's current public IP as a /32.
+# Find yours:  curl -s https://api.ipify.org
+api_server_authorized_ip_ranges = [
+  "1.2.3.4/32",   # developer-1 laptop
+  # "5.6.7.8/32", # developer-2 laptop
+]
+
+# ── Optional overrides (defaults shown) ───────────────────────────────────────
+# location           = "eastus"
+# environment        = "dev"
+# prefix             = "qwen"
+# cost_center        = "experimental"
+# kubernetes_version = "1.35"
+# gpu_zone           = "1"
+
+# ── ArgoCD ─────────────────────────────────────────────────────────────────────
+# Step 1: apply with argocd_enabled=false (cluster creation only).
+# Step 2: set argocd_enabled=true and fill gitops_repo_url + azdo_pat, then apply.
+# Existing install: run  bash scripts/import-argocd-state.sh  before step 2.
+
+argocd_enabled   = true
+gitops_repo_url  = "https://<org>@dev.azure.com/<org>/<project>/_git/<repo>"
+azdo_pat         = "your-pat-here"   # Code (Read) scope
+# argocd_chart_version = "9.5.2"    # override only when upgrading
+
+# ── Public endpoints & oauth2-proxy Entra ID app ──────────────────────────────
+# public_domain              = "example.com"   # chat.<domain>, argocd.<domain>
+oauth2_proxy_client_id     = "00000000-0000-0000-0000-000000000000"
+oauth2_proxy_app_object_id = "00000000-0000-0000-0000-000000000000"

@@ -1,0 +1,52 @@
+# KEDA Helm values — aks-qwen-dev
+#
+# Single replica of each component (experimental).
+# Used primarily for ScaledObject definitions that scale vLLM pods
+# based on GPU queue depth or custom metrics.
+
+operator:
+  replicaCount: 1
+  nodeSelector:
+    role: user
+  tolerations: []
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+metricsServer:
+  replicaCount: 1
+  nodeSelector:
+    role: user
+  tolerations: []
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+webhooks:
+  enabled: true
+  nodeSelector:
+    role: user
+  tolerations: []
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+prometheus:
+  metricServer:
+    enabled: false
+  operator:
+    enabled: false
+  webhooks:
+    enabled: false

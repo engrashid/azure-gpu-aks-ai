@@ -1,0 +1,36 @@
+# Headless Service + Endpoints that point to the nginx internal LoadBalancer IP.
+#
+# Why this exists:
+#   AGIC + Azure CNI Overlay puts pod overlay IPs (172.17.x.x) into the App
+#   Gateway backend pool, but those IPs are unreachable from the App Gateway
+#   subnet. By creating a headless Service whose Endpoints contain the nginx
+#   internal LB IP (10.1.1.100 — a real AKS-subnet VNet IP), AGIC puts a
+#   routable IP in the backend pool. App Gateway then forwards to nginx, which
+#   routes to the Open WebUI pods normally inside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-bridge
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "open-webui.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: nginx-bridge
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "open-webui.labels" . | nindent 4 }}
+subsets:
+  - addresses:
+      - ip: {{ .Values.nginxBridgeIP }}
+    ports:
+      - port: 80

@@ -1,0 +1,90 @@
+# oauth2-proxy Helm values — aks-qwen-dev
+#
+# Auth-only mode: oauth2-proxy is called via nginx auth_request on each
+# protected ingress. It validates the AAD token and passes identity headers
+# to the upstream (vLLM, Grafana, etc.).
+#
+# CREDENTIALS — DO NOT add client-id, client-secret, or cookie-secret here.
+# Those are loaded from the manually created Kubernetes secret:
+#
+#   kubectl create secret generic oauth2-proxy-creds \
+#     -n oauth2-proxy \
+#     --from-literal=client-id=<AAD_APP_CLIENT_ID> \
+#     --from-literal=client-secret=<AAD_APP_CLIENT_SECRET> \
+#     --from-literal=cookie-secret=$(openssl rand -base64 32 | head -c 32)
+#
+# See: docs/runbooks/oauth2-proxy-aad-setup.md for full setup steps.
+
+replicaCount: 1
+
+config:
+  # Credentials come from the manually created secret (not committed to git).
+  existingSecret: oauth2-proxy-creds
+
+  # Non-secret OIDC configuration.
+  # Replace <TENANT_ID> with your Azure AD tenant ID.
+  # Obtain via: az account show --query tenantId -o tsv
+  configFile: |
+    provider = "oidc"
+    oidc_issuer_url = "https://login.microsoftonline.com/<tenant-id>/v2.0"
+
+    email_domains = ["*"]
+
+    # Auth-only mode: no upstream to proxy to.
+    # Ingresses call /oauth2/auth via auth_request; oauth2-proxy returns
+    # 202 Accepted or 401 Unauthorized.
+    upstreams = ["file:///dev/null"]
+
+    # Required when running behind a reverse proxy (ingress-nginx).
+    reverse_proxy = true
+
+    # Forward the AAD access token and identity to upstream services.
+    pass_access_token = true
+    pass_authorization_header = true
+    set_authorization_header = true
+
+    # Secure cookie settings.
+    cookie_secure = true
+    cookie_samesite = "lax"
+    cookie_name = "_oauth2_proxy"
+
+    # Skip the intermediate "Sign in" button page.
+    skip_provider_button = true
+
+    # Redirect after login to the originally requested URL.
+    redirect_url = ""
+
+service:
+  type: ClusterIP
+  portNumber: 4180
+
+ingress:
+  # No dedicated Ingress for oauth2-proxy itself.
+  # nginx auth_request routes to the ClusterIP service directly.
+  enabled: false
+
+nodeSelector:
+  role: user
+
+tolerations: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Liveness / readiness probes use /ping (no auth required).
+livenessProbe:
+  enabled: true
+  path: /ping
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  enabled: true
+  path: /ready
+  initialDelaySeconds: 10
+  periodSeconds: 10

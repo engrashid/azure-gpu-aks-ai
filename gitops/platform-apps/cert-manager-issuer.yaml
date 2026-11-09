@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-issuer
+  namespace: argocd
+  labels:
+    managed-by: argocd
+    app.kubernetes.io/part-of: platform
+  annotations:
+    # Wave 2: runs after cert-manager (wave 0) has installed CRDs and its
+    # webhook is ready to serve Certificate and ClusterIssuer resources.
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL: https://github.com/engrashid/azure-gpu-aks-ai.git
+    targetRevision: main
+    path: gitops/platform-apps/cert-manager-resources
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

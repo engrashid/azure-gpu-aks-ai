@@ -1,0 +1,78 @@
+# ingress-nginx Helm values — aks-qwen-dev
+#
+# Internal LoadBalancer on the AKS subnet with a static private IP.
+# Long timeouts are required for LLM inference requests (streaming responses
+# can run for 5–10 minutes on large models).
+
+admissionWebhooks:
+  # Disabled: admission-patch job doesn't populate caBundle in this setup.
+  # ArgoCD validates Ingress manifests before apply; runtime validation is redundant.
+  enabled: false
+
+controller:
+  replicaCount: 2
+
+  # Static internal IP. Must be within the aks-subnet CIDR (10.1.1.0/24).
+  # Reserving .100 keeps it predictable for DNS and firewall rules.
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+      service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "aks-subnet"
+      service.beta.kubernetes.io/azure-load-balancer-ipv4: "10.1.1.100"
+
+  ingressClassResource:
+    name: nginx
+    default: true
+    enabled: true
+
+  config:
+    # Allow up to 10 MiB request bodies (model prompt payloads can be large).
+    proxy-body-size: "10m"
+    # Long timeouts for streaming LLM inference responses.
+    proxy-read-timeout: "600"
+    proxy-send-timeout: "600"
+    proxy-connect-timeout: "60"
+    # Preserve client IP through the internal LB.
+    use-forwarded-headers: "true"
+    compute-full-forwarded-for: "true"
+
+  metrics:
+    enabled: true
+    serviceMonitor:
+      # Set to true when Prometheus Operator is installed (platform phase 2).
+      enabled: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Run on the user node pool. Must not run on GPU nodes.
+  nodeSelector:
+    role: user
+
+  tolerations: []
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Spread replicas across both user-pool nodes.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+
+  # Graceful drain on node eviction.
+  lifecycle:
+    preStop:
+      exec:
+        command:
+          - /wait-shutdown

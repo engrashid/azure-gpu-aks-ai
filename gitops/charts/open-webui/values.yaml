@@ -1,0 +1,119 @@
+# open-webui Helm chart defaults
+#
+# Override per-environment in gitops/envs/<env>/open-webui-values.yaml.
+
+# ── Image ──────────────────────────────────────────────────────────────────────
+image:
+  repository: ghcr.io/open-webui/open-webui
+  tag: "v0.6.5"
+  pullPolicy: IfNotPresent
+
+# ── Replica count ──────────────────────────────────────────────────────────────
+replicaCount: 1
+
+# ── vLLM backend connection ────────────────────────────────────────────────────
+# Open WebUI speaks to vLLM via the OpenAI-compatible REST API.
+# Set this to the ClusterIP service of the vLLM deployment.
+openai:
+  baseUrl: "http://qwen-api.gpu-inference.svc.cluster.local:8000/v1"
+  # vLLM does not enforce API key auth by default; set a dummy value.
+  apiKey: "not-used"
+
+# ── Persistence ────────────────────────────────────────────────────────────────
+# Open WebUI stores users, chat history, and settings in a SQLite database at
+# /app/backend/data. A PVC backed by Azure Managed Disk survives pod restarts.
+persistence:
+  enabled: true
+  storageClass: "managed-csi"   # Azure Disk CSI — Standard_LRS
+  accessMode: ReadWriteOnce
+  size: 4Gi
+
+# ── Service ────────────────────────────────────────────────────────────────────
+service:
+  type: NodePort
+  port: 8080
+  targetPort: 8080
+
+# ── Ingress ─────────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+
+  # cert-manager ClusterIssuer name used on the AGW ingress.
+  # Switch to letsencrypt-prod once staging cert validates successfully.
+  certIssuer: letsencrypt-staging
+
+  hosts:
+    - host: chat.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+  tls:
+    - secretName: open-webui-tls
+      hosts:
+        - chat.example.com
+
+# ── nginx bridge ────────────────────────────────────────────────────────────────
+# IP of the nginx internal LoadBalancer — used as the App Gateway backend so
+# AGIC puts a VNet-routable IP in the backend pool (overlay workaround).
+nginxBridgeIP: "10.1.1.100"
+
+# ── Resources ──────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+# ── Health probes ──────────────────────────────────────────────────────────────
+probes:
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 20
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# ── Extra environment variables ────────────────────────────────────────────────
+extraEnv:
+  WEBUI_NAME: "Qwen Chat"
+  # Disable Open WebUI's built-in Ollama — we use OpenAI-compatible vLLM.
+  ENABLE_OLLAMA_API: "false"
+  ENABLE_OPENAI_API: "true"
+  # Auth: require login. Set WEBUI_AUTH=false to disable (not recommended).
+  WEBUI_AUTH: "true"
+  # Default model shown in the UI (matches vLLM --served-model-name).
+  DEFAULT_MODELS: "qwen"
+
+# ── Pod metadata ───────────────────────────────────────────────────────────────
+podLabels:
+  app.kubernetes.io/name: open-webui
+  app.kubernetes.io/component: chat-ui
+
+podAnnotations: {}
+
+# ── Graceful shutdown ──────────────────────────────────────────────────────────
+terminationGracePeriodSeconds: 30
+
+# ── Name overrides ─────────────────────────────────────────────────────────────
+nameOverride: ""
+fullnameOverride: ""

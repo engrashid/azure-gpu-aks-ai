@@ -1,0 +1,96 @@
+# Root Applications — app-of-apps entry point
+#
+# Two Applications that watch gitops/platform-apps/ and gitops/workload-apps/.
+# Each of those directories contains one Application manifest per component.
+# Adding a file to either directory is all that is needed to bring a new
+# component under GitOps management.
+#
+# GITOPS_REPO_URL_PLACEHOLDER is substituted at apply time by:
+#   bootstrap-argocd.sh  — sed replacement
+#   Terraform argocd module — replace() function with var.gitops_repo_url
+#
+# Do NOT apply this file directly.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-root
+  namespace: argocd
+  labels:
+    managed-by: bootstrap-script
+    app.kubernetes.io/part-of: argocd-bootstrap
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL: GITOPS_REPO_URL_PLACEHOLDER
+    targetRevision: main
+    path: gitops/platform-apps
+
+    directory:
+      recurse: false
+      include: "*.yaml"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: workloads-root
+  namespace: argocd
+  labels:
+    managed-by: bootstrap-script
+    app.kubernetes.io/part-of: argocd-bootstrap
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL: GITOPS_REPO_URL_PLACEHOLDER
+    targetRevision: main
+    path: gitops/workload-apps
+
+    directory:
+      recurse: false
+      include: "*.yaml"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

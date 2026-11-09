@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: oauth2-proxy
+  namespace: argocd
+  labels:
+    managed-by: argocd
+    app.kubernetes.io/part-of: platform
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  sources:
+    - repoURL: https://oauth2-proxy.github.io/manifests
+      chart: oauth2-proxy
+      targetRevision: "7.7.4"
+      helm:
+        releaseName: oauth2-proxy
+        valueFiles:
+          - $values/gitops/envs/dev/oauth2-proxy-values.yaml
+
+    - repoURL: https://github.com/engrashid/azure-gpu-aks-ai.git
+      ref: values
+      targetRevision: main
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: oauth2-proxy
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

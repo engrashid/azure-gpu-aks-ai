@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qwen-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qwen-api.labels" . | nindent 4 }}
+spec:
+  # KEDA controls replica count at runtime when keda.enabled=true.
+  # ArgoCD ignoreDifferences on /spec/replicas prevents state drift alerts.
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "qwen-api.selectorLabels" . | nindent 6 }}
+  # Recreate strategy: only one GPU pod at a time on a single T4 node.
+  # RollingUpdate would require 2× GPU allocation during transitions.
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "qwen-api.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        # Azure Workload Identity webhook injects the OIDC token volume when
+        # this label is present. Required for Blob CSI workload identity auth.
+        azure.workload.identity/use: "true"
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+
+      # Schedule exclusively on the GPU node pool.
+      nodeSelector:
+        {{- toYaml .Values.gpu.nodeSelector | nindent 8 }}
+
+      # Required to bypass the nvidia.com/gpu=present:NoSchedule taint.
+      tolerations:
+        {{- toYaml .Values.gpu.tolerations | nindent 8 }}
+
+      # Evenly spread across available GPU nodes if maxReplicaCount > 1.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              {{- include "qwen-api.selectorLabels" . | nindent 14 }}
+
+      containers:
+        - name: vllm
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          # vLLM OpenAI-compatible server CLI arguments.
+          # --model points directly at the local blob mount path where weights
+          # are stored flat (not in HuggingFace cache layout). This avoids any
+          # Hub connectivity check at startup (TRANSFORMERS_OFFLINE=1 would
+          # block it anyway).
+          args:
+            - "--model={{ .Values.storage.mountPath }}/{{ .Values.storage.modelSubPath }}"
+            - "--quantization={{ .Values.model.quantization }}"
+            - "--max-model-len={{ .Values.model.maxModelLen }}"
+            - "--gpu-memory-utilization={{ .Values.model.gpuMemoryUtilization }}"
+            - "--tensor-parallel-size={{ .Values.model.tensorParallelSize }}"
+            - "--dtype={{ .Values.model.dtype }}"
+            - "--served-model-name={{ .Values.model.servedModelName }}"
+            - "--host=0.0.0.0"
+            - "--port=8000"
+
+          env:
+            # Point HuggingFace libraries at the Blob-mounted model cache.
+            - name: HF_HOME
+              value: {{ .Values.storage.mountPath | quote }}
+            # Prevent any outbound download attempts — model is on local disk.
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+
+          # Additional env vars from the ConfigMap (CUDA tuning, log levels, etc.)
+          envFrom:
+            - configMapRef:
+                name: {{ include "qwen-api.configMapName" . }}
+
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          # Startup probe budget: 60s initial delay + 40×15s = 660s total.
+          # This covers the full cold-start path:
+          #   1. AKS scales GPU node from zero:              ~5–8 min
+          #   2. Blob CSI FUSE2 mounts model storage:        ~30s
+          #   3. vLLM loads and quantizes 5 GiB AWQ weights: ~2–3 min
+          # The liveness probe only activates after startup succeeds.
+          startupProbe:
+            {{- toYaml .Values.probes.startupProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.probes.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.probes.readinessProbe | nindent 12 }}
+
+          securityContext:
+            # vLLM official image currently runs as root (required for GPU
+            # device access via the NVIDIA container runtime).
+            # Track https://github.com/vllm-project/vllm/issues for non-root support.
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+
+          volumeMounts:
+            - name: model-storage
+              mountPath: {{ .Values.storage.mountPath }}
+              readOnly: true
+            # vLLM uses /dev/shm for inter-process tensor sharing.
+            # tmpfs-backed emptyDir avoids the default 64 MiB /dev/shm limit.
+            - name: shm
+              mountPath: /dev/shm
+
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: {{ include "qwen-api.pvcName" . }}
+        - name: shm
+          emptyDir:
+            medium: Memory
+            # 4 GiB covers single-GPU tensor sharing; raise if TP > 1.
+            sizeLimit: 4Gi
