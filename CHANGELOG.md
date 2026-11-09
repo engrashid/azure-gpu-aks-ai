@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Architecture diagram redrawn in draw.io with official Azure icons
+  (`docs/images/architecture.drawio` + PNG), replacing the Mermaid diagram in
+  the README.
+
 ## [0.1.0] - 2026-11-09
 
 First tagged release of the public reference platform.

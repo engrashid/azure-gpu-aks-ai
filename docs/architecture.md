@@ -1,7 +1,12 @@
 # Architecture
 
-This document describes how the platform is put together and why. For a
-one-screen overview see the diagram in the [README](../README.md#architecture).
+This document describes how the platform is put together and why.
+
+![Architecture diagram](images/architecture.png)
+
+The diagram source is [`images/architecture.drawio`](images/architecture.drawio);
+edit it in [diagrams.net](https://app.diagrams.net) or the draw.io desktop app and
+re-export the PNG (`draw.io -x -f png --scale 1.5 --border 20 -o docs/images/architecture.png docs/images/architecture.drawio`).
 
 ## Goals
 
