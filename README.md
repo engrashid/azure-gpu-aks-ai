@@ -1,6 +1,7 @@
 # Private LLM Inference Platform on Azure AKS (GPU)
 
 [![CI](https://github.com/engrashid/azure-gpu-aks-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/engrashid/azure-gpu-aks-ai/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 A production-style, self-hosted LLM platform on Azure Kubernetes Service: **Qwen2.5-7B-Instruct (AWQ) served by vLLM on NVIDIA T4 GPUs**, fronted by an Entra ID–protected chat UI, deployed end-to-end with **layered Terraform + ArgoCD GitOps**, with all egress forced through Azure Firewall.
 
@@ -92,7 +93,7 @@ gitops/
 scripts/               # model upload, ArgoCD bootstrap/import, validation
 docs/                  # architecture, cost, prerequisites
   runbooks/            # bootstrap, Qwen deployment, oauth2-proxy/Entra setup, vLLM troubleshooting
-.github/               # CI workflow, Dependabot
+.github/               # CI workflow, Dependabot, issue/PR templates, CODEOWNERS
 ```
 
 ## Documentation
@@ -135,6 +136,23 @@ More in [`docs/runbooks/vllm-troubleshooting.md`](docs/runbooks/vllm-troubleshoo
 - [ ] vLLM Prometheus metrics → Grafana dashboard (tokens/s, queue depth, GPU utilisation)
 - [ ] Azure Policy / Kyverno guardrails (allowed GPU SKUs, required labels)
 - [x] CI pipeline: `terraform validate`, Checkov and Helm lint on every PR
+
+## Contributing
+
+Contributions are welcome — bug reports, docs fixes, new guardrails or roadmap
+items. Start with [CONTRIBUTING.md](CONTRIBUTING.md) (local validation with
+`make validate`, Conventional Commits, PR process) and look for issues labelled
+[`good first issue`](https://github.com/engrashid/azure-gpu-aks-ai/labels/good%20first%20issue)
+or [`help wanted`](https://github.com/engrashid/azure-gpu-aks-ai/labels/help%20wanted).
+Questions go to [Discussions](https://github.com/engrashid/azure-gpu-aks-ai/discussions).
+
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md) and report security
+issues privately as described in [SECURITY.md](SECURITY.md). AI coding agents
+should read [AGENTS.md](AGENTS.md).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Md Harunur Rashid.
 
 ---
 

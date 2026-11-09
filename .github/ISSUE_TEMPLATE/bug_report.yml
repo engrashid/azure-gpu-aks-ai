@@ -1,0 +1,74 @@
+name: Bug report
+description: Something in the Terraform, GitOps manifests, charts or scripts does not work as documented.
+title: "fix: <short description>"
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Do not paste real subscription/tenant/app IDs, IPs, domains or secrets** —
+        replace them with placeholders such as `<tenant-id>` or `example.com`.
+        Security vulnerabilities must be reported privately (see SECURITY.md).
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - terraform/layer1-persistent
+        - terraform/layer2-ephemeral
+        - gitops (ArgoCD apps / projects)
+        - charts/qwen-api (vLLM)
+        - charts/open-webui
+        - scripts
+        - docs
+        - CI / tooling
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include the exact error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. terraform apply in terraform/layer2-ephemeral with ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Versions of the tools involved.
+      placeholder: |
+        - Commit / release:
+        - Terraform:
+        - azurerm provider:
+        - AKS Kubernetes version:
+        - Azure region:
+        - Helm / ArgoCD:
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs (redacted)
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and discussions.
+          required: true
+        - label: I removed real IDs, IPs, domains and secrets from this report.
+          required: true

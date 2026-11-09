@@ -1,8 +1,8 @@
 # Prerequisites
 
 What you need to **deploy** the platform. To only **validate** changes (the CI
-checks), no Azure account is required — run `make validate` (see the
-[Makefile](../Makefile)).
+checks), no Azure account is required — see
+[CONTRIBUTING.md](../CONTRIBUTING.md#prerequisites).
 
 ## Azure
 
