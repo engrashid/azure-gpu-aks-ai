@@ -1,5 +1,7 @@
 # Private LLM Inference Platform on Azure AKS (GPU)
 
+[![CI](https://github.com/engrashid/azure-gpu-aks-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/engrashid/azure-gpu-aks-ai/actions/workflows/ci.yml)
+
 A production-style, self-hosted LLM platform on Azure Kubernetes Service: **Qwen2.5-7B-Instruct (AWQ) served by vLLM on NVIDIA T4 GPUs**, fronted by an Entra ID–protected chat UI, deployed end-to-end with **layered Terraform + ArgoCD GitOps**, with all egress forced through Azure Firewall.
 
 > Built as a hands-on reference for running private AI inference in a regulated-style environment: identity-first access, no public data-plane endpoints, policy-scanned IaC, and GPU cost control.
@@ -61,7 +63,7 @@ flowchart LR
 | **Identity & access** | Entra ID–integrated AKS RBAC with local accounts disabled; Entra groups managed in Terraform; oauth2-proxy (OIDC) in front of the chat UI; **Workload Identity** (federated credential) for pod → Azure access — no static cloud credentials in the cluster. |
 | **Network security** | Hub-spoke VNets, `outbound_type = userDefinedRouting` so **all egress goes through Azure Firewall** with an explicit FQDN allow-list (AKS, MCR, Hugging Face, Let's Encrypt, …). Private endpoints + private DNS for ACR, Key Vault and Storage. Calico NetworkPolicies and PodDisruptionBudgets on the inference workload. API server restricted to authorized IP ranges. |
 | **Observability** | Log Analytics (diagnostic settings for AKS) and Azure Managed Grafana. |
-| **IaC quality** | Checkov policy scanning (`.checkov.yaml` documents every skipped check and why), pinned chart/image versions, `terraform validate`-clean modules. |
+| **IaC quality** | CI on every PR: `terraform fmt`/`validate`, TFLint, Checkov (`.checkov.yaml` documents every skipped check and why), Helm lint/template, yamllint, markdownlint, link check and gitleaks. Pinned provider (lock files), chart, image and action versions. |
 
 ## Two-layer Terraform: why
 
@@ -88,10 +90,28 @@ gitops/
   charts/              # in-repo Helm charts
   envs/dev/            # per-environment values
 scripts/               # model upload, ArgoCD bootstrap/import, validation
-docs/runbooks/         # bootstrap, Qwen deployment, oauth2-proxy/Entra setup, vLLM troubleshooting
+docs/                  # architecture, cost, prerequisites
+  runbooks/            # bootstrap, Qwen deployment, oauth2-proxy/Entra setup, vLLM troubleshooting
+.github/               # CI workflow, Dependabot
 ```
 
+## Documentation
+
+| Doc | What it covers |
+|---|---|
+| [Architecture](docs/architecture.md) | Layers, network, compute, identity, GitOps and scaling design |
+| [Prerequisites](docs/prerequisites.md) | Azure permissions, GPU quota, DNS and local tools |
+| [Cost](docs/cost.md) | Billable SKUs and how to estimate cost for your region |
+| [GPU stack bootstrap](docs/runbooks/gpu-stack-bootstrap.md) | End-to-end bring-up and known issues |
+| [Qwen deployment](docs/runbooks/qwen-deployment.md) | Model upload and vLLM rollout |
+| [ArgoCD bootstrap](docs/runbooks/argocd-bootstrap.md) | Installing and importing ArgoCD |
+| [oauth2-proxy / Entra ID](docs/runbooks/oauth2-proxy-aad-setup.md) | App registration and SSO for the chat UI |
+| [vLLM troubleshooting](docs/runbooks/vllm-troubleshooting.md) | Common failures and fixes |
+| [Changelog](CHANGELOG.md) | Release history |
+
 ## Deploy (summary)
+
+Check the [prerequisites](docs/prerequisites.md) first (GPU quota in particular).
 
 1. **Layer 1** – bootstrap remote state, then `terraform apply` in `terraform/layer1-persistent`.
 2. **Upload model weights** – `AZURE_SUBSCRIPTION_ID=... scripts/upload-model.sh`.
@@ -114,7 +134,7 @@ More in [`docs/runbooks/vllm-troubleshooting.md`](docs/runbooks/vllm-troubleshoo
 - [ ] HTTP-based KEDA trigger for true pod scale-to-zero
 - [ ] vLLM Prometheus metrics → Grafana dashboard (tokens/s, queue depth, GPU utilisation)
 - [ ] Azure Policy / Kyverno guardrails (allowed GPU SKUs, required labels)
-- [ ] CI pipeline: `terraform validate`, Checkov and Helm lint on every PR
+- [x] CI pipeline: `terraform validate`, Checkov and Helm lint on every PR
 
 ---
 
