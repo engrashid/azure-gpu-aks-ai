@@ -45,9 +45,11 @@ Internet → Azure Firewall (FQDN rules) → AKS Spoke VNet
 ### Issue 1 — NVIDIA device plugin not deployed after GPU node provisioned
 
 **Symptom:**
+
 ```
 0/4 nodes are available: 1 Insufficient nvidia.com/gpu
 ```
+
 GPU node is Ready and labelled correctly, but `nvidia.com/gpu` is absent from
 `kubectl describe node` Allocatable section.
 
@@ -69,6 +71,7 @@ rule — the device plugin image is only published on NVIDIA Container Registry.
 ### Issue 2 — Azure Blob CSI driver not enabled on AKS cluster
 
 **Symptom:**
+
 ```
 MountVolume.MountDevice failed: driver name blob.csi.azure.com not found
 in the list of registered CSI drivers
@@ -79,6 +82,7 @@ in the list of registered CSI drivers
 block. Without it, the `blob.csi.azure.com` driver is unavailable on nodes.
 
 **Fix:**
+
 ```bash
 az aks update \
   --resource-group rg-qwen-ephemeral-dev \
@@ -86,6 +90,7 @@ az aks update \
   --enable-blob-driver \
   --yes
 ```
+
 Also added `storage_profile { blob_driver_enabled = true }` to the AKS Terraform module.
 
 ---
@@ -93,6 +98,7 @@ Also added `storage_profile { blob_driver_enabled = true }` to the AKS Terraform
 ### Issue 3 — Blob CSI `clientID` in volumeAttributes overrides `nodeStageSecretRef`
 
 **Symptom:**
+
 ```
 MountVolume.SetUp failed: failed to list keys, error: POST
 .../storageAccounts/stqwenmodelsdev/listKeys
@@ -102,6 +108,7 @@ The client '<vllm-identity-client-id>' does not have authorization to perform ac
 ```
 
 **Root cause:** The Azure Blob CSI driver's auth priority:
+
 1. If `clientID` is set in `spec.csi.volumeAttributes`, the driver uses that managed
    identity to call `listKeys` on the storage management plane (to obtain the account key
    for blobfuse2).
@@ -113,6 +120,7 @@ The vLLM managed identity only has `Storage Blob Data Reader` (data plane), not 
 **Fix:** Two-part:
 
 1. Create a Kubernetes secret with the storage account key:
+
 ```bash
 kubectl create secret generic azure-blob-csi-secret \
   --namespace gpu-inference \
@@ -123,12 +131,13 @@ kubectl create secret generic azure-blob-csi-secret \
     --query '[0].value' -o tsv 2>/dev/null)"
 ```
 
-2. Updated `gitops/charts/qwen-api/templates/persistentvolume.yaml` to:
+1. Updated `gitops/charts/qwen-api/templates/persistentvolume.yaml` to:
    - Add `nodeStageSecretRef` when `storage.csi.accountKeySecretName` is set
    - Conditionally **omit** `clientID` from `volumeAttributes` when using the secret
      (having both causes the driver to use `clientID` for `listKeys`, ignoring the secret)
 
 Relevant chart logic:
+
 ```yaml
 volumeAttributes:
   {{- if not .Values.storage.csi.accountKeySecretName }}
@@ -147,6 +156,7 @@ nodeStageSecretRef:
 ### Issue 4 — vLLM crashes at startup: HuggingFace Hub check fails offline
 
 **Symptom:**
+
 ```
 huggingface_hub.errors.OfflineModeIsEnabled: Cannot reach
 https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-AWQ/resolve/main/config.json:
@@ -158,11 +168,13 @@ to Hub to resolve `config.json` even before checking the local `--download-dir`.
 `TRANSFORMERS_OFFLINE=1` set, this check is blocked and vLLM exits immediately.
 
 Additionally, our upload script stores model weights flat in the blob container:
+
 ```
 model-weights/qwen2.5-7b-instruct-awq/config.json
 model-weights/qwen2.5-7b-instruct-awq/model-*.safetensors
 ...
 ```
+
 This is NOT the HuggingFace cache directory format (`models--Qwen--Qwen2.5-7B-Instruct-AWQ/snapshots/<hash>/...`),
 so the Hub ID approach would fail even if Hub were reachable.
 
@@ -182,6 +194,7 @@ connectivity required.
 ### Issue 5 — Docker Hub large layer downloads blocked by firewall
 
 **Symptom:**
+
 ```
 Failed to pull image "vllm/vllm-openai:v0.6.4": failed to copy:
 Get "https://production.cloudflare.docker.com/registry-v2/...": EOF
@@ -199,6 +212,7 @@ rule in `terraform/layer2-ephemeral/modules/networking/firewall-rules.tf`.
 ### Issue 6 — oauth2-proxy pod in `CreateContainerConfigError`
 
 **Symptom:**
+
 ```
 Error: secret "oauth2-proxy-creds" not found
 ```
@@ -209,6 +223,7 @@ cluster before the pod can start.
 
 **Fix:** Create the secret (see Prerequisites section in `qwen-deployment.md`).
 The AAD app `qwen-aks-dev-oauth2` was created for this cluster with:
+
 - Client ID: `<oauth2-client-id>`
 - Redirect URI: `https://qwen.dev.internal/oauth2/callback`
 - Graph permissions: `openid`, `email`, `profile`
@@ -224,6 +239,7 @@ The AAD app `qwen-aks-dev-oauth2` was created for this cluster with:
 VNet to provision internal load balancers. This assignment was missing.
 
 **Fix:** Added to `terraform/layer2-ephemeral/modules/aks/rbac.tf`:
+
 ```hcl
 resource "azurerm_role_assignment" "aks_network_contributor" {
   scope                = var.spoke_vnet_id
@@ -240,12 +256,14 @@ resource "azurerm_role_assignment" "aks_network_contributor" {
 
 **Root cause:** AKS injects two `matchExpressions` into every
 `ValidatingWebhookConfiguration`'s `namespaceSelector` at the cluster level:
+
 - `kubernetes.azure.com/managedby NotIn aks`
 - `control-plane NotIn true`
 
 ArgoCD detects this as drift because these expressions are not in the Helm chart manifests.
 
 **Fix:**
+
 1. Added `RespectIgnoreDifferences=true` to `syncOptions` in both `cert-manager.yaml`
    and `keda.yaml` ArgoCD Applications (without this, ArgoCD still marks them OutOfSync
    even if it suppresses the UI diff).

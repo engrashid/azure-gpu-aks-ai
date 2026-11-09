@@ -1,0 +1,65 @@
+# Pre-commit hooks mirror the CI pipeline (.github/workflows/ci.yml).
+# Install:  pre-commit install
+# Run all:  pre-commit run --all-files
+# Tool versions are pinned here and in CI — bump both together.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.109.4
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_tflint
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        args: [--strict]
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.24.0
+    hooks:
+      - id: markdownlint-cli2
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      # Validate root modules only (as CI does): child modules such as
+      # layer2-ephemeral/modules/argocd read gitops/ files relative to the
+      # root module and cannot be validated standalone.
+      - id: terraform-validate
+        name: terraform validate (root modules)
+        language: system
+        entry: make tf-validate
+        files: ^terraform/.*\.(tf|hcl)$
+        pass_filenames: false
+      - id: checkov
+        name: checkov
+        language: python
+        additional_dependencies: ["checkov==3.4.3"]
+        entry: checkov -d terraform --config-file .checkov.yaml --framework terraform --compact --quiet
+        files: ^terraform/.*\.tf$
+        pass_filenames: false
+      - id: helm-lint
+        name: helm lint + template
+        language: system
+        entry: make helm
+        files: ^gitops/(charts|envs)/
+        pass_filenames: false

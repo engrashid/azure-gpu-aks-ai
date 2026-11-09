@@ -1,0 +1,24 @@
+---
+# markdownlint-cli2 configuration — https://github.com/DavidAnson/markdownlint-cli2
+config:
+  default: true
+  # Long lines are common in tables, links and command examples.
+  MD013: false
+  # Allow inline HTML used for <details>, <br/> in diagrams, badges.
+  MD033: false
+  # Runbooks use bold text as pseudo-headings in places.
+  MD036: false
+  # Allow repeated headings in different sections (e.g. "Verify").
+  MD024:
+    siblings_only: true
+  # Fenced code blocks without a language are allowed for directory trees/output.
+  MD040: false
+  # Tables: do not enforce column alignment style.
+  MD060: false
+
+globs:
+  - "**/*.md"
+
+ignores:
+  - "**/.terraform/**"
+  - "node_modules/**"

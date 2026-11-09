@@ -107,6 +107,7 @@ resource "azurerm_subnet_network_security_group_association" "pe" {
 #   AzureLoadBalancer inbound               — Azure LB health checks.
 
 resource "azurerm_network_security_group" "appgw" {
+  # checkov:skip=CKV_AZURE_160:Port 80 must be reachable from the Internet for Let's Encrypt HTTP-01 challenges and HTTP→HTTPS redirect
   name                = "nsg-appgw-${var.name_prefix}-${var.environment}"
   resource_group_name = var.resource_group_name
   location            = var.location

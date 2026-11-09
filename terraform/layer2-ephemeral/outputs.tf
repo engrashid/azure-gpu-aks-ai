@@ -77,4 +77,3 @@ output "chat_ui_url" {
   description = "Public URL of the Open WebUI chat interface"
   value       = "https://chat.${var.public_domain}"
 }
-

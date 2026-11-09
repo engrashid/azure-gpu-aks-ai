@@ -103,6 +103,7 @@ terraform apply -var-file=terraform.tfvars \
 ```
 
 Or, if you need immediate access (bypasses Terraform state):
+
 ```bash
 az aks update \
   --resource-group rg-qwen-ephemeral-dev \
@@ -167,6 +168,7 @@ logs/drift-cycle-2.txt               ...
 ```
 
 The `logs/` directory is created automatically. Add it to `.gitignore`:
+
 ```
 /logs/*.log
 /logs/drift-*.txt
@@ -198,6 +200,7 @@ the script still runs. Install coreutils for enforcement: `brew install coreutil
 ```
 
 Fix:
+
 ```bash
 scripts/validate-and-test.sh --refresh-ip
 # Then apply the change (see output for the exact command)
@@ -228,6 +231,7 @@ Error: Failed to get existing workspaces
 ```
 
 Layer 1 bootstrap has not been run, or the storage account doesn't exist:
+
 ```bash
 cd terraform/layer1-persistent/bootstrap
 terraform init
@@ -258,6 +262,7 @@ az role assignment create \
 
 Azure Firewall Basic tier is the slowest resource to delete (~10–15 min).
 If destroy hangs beyond 30 minutes:
+
 ```bash
 # Check what's left
 az resource list --resource-group rg-qwen-ephemeral-dev --output table

@@ -69,6 +69,7 @@ echo "Client Secret: ${CLIENT_SECRET}"
 Save the secret now — Azure does not display it again.
 
 Recommended: store it in the cluster Key Vault:
+
 ```bash
 az keyvault secret set \
   --vault-name "kv-qwen-dev-<suffix>" \
@@ -191,6 +192,7 @@ az ad app permission grant \
 **Symptom:** `AADSTS50011: The redirect URI does not match the registered URIs`
 
 **Fix:** Add the exact URI shown in the error to the app registration:
+
 ```bash
 az ad app update --id "${APP_ID}" \
   --web-redirect-uris <existing-uris...> <missing-uri>
@@ -201,6 +203,7 @@ az ad app update --id "${APP_ID}" \
 **Symptom:** oauth2-proxy logs show `invalid_client` on token exchange.
 
 **Fix:** Check the secret expiry in AAD, rotate it, recreate the k8s secret.
+
 ```bash
 az ad app credential list --id "${APP_ID}"
 # Look for expired credentials

@@ -46,12 +46,14 @@ kubectl logs -n gpu-inference \
 ```
 
 **Diagnose:**
+
 ```bash
 kubectl get nodes -l gpu-type=nvidia-t4
 kubectl describe pod -n gpu-inference <pod-name> | grep -A5 Events
 ```
 
 **Fix:** Wait 5–10 minutes for AKS to provision the GPU node. If it never comes up:
+
 ```bash
 kubectl logs -n kube-system -l app=cluster-autoscaler | tail -50
 az vm list-usage --location eastus --query "[?name.value=='standardNCASv3Family']"
@@ -62,6 +64,7 @@ az vm list-usage --location eastus --query "[?name.value=='standardNCASv3Family'
 ```
 0/N nodes are available: 1 Insufficient nvidia.com/gpu
 ```
+
 Even though a GPU node exists, `nvidia.com/gpu` is missing from `kubectl describe node`.
 
 **Root cause:** `gpu_driver = "Install"` in Terraform installs the NVIDIA driver on the
@@ -69,6 +72,7 @@ node OS, but does NOT deploy the NVIDIA Kubernetes Device Plugin DaemonSet. With
 Kubernetes cannot see the GPU resource.
 
 **Diagnose:**
+
 ```bash
 kubectl get daemonset -n kube-system | grep nvidia
 kubectl describe node <gpu-node> | grep "nvidia.com/gpu"
@@ -78,6 +82,7 @@ kubectl describe node <gpu-node> | grep "nvidia.com/gpu"
 **Fix:** The device plugin is GitOps-managed via `gitops/platform-apps/nvidia-device-plugin.yaml`.
 On a fresh cluster, force an ArgoCD sync of `platform-root` and then `nvidia-device-plugin`.
 If you need to apply it manually in an emergency:
+
 ```bash
 kubectl apply -f gitops/platform-apps/nvidia-device-plugin.yaml
 # Then sync via ArgoCD
@@ -85,6 +90,7 @@ argocd app sync nvidia-device-plugin
 ```
 
 Verify after deployment:
+
 ```bash
 kubectl get pods -n kube-system -l name=nvidia-device-plugin-ds
 kubectl describe node <gpu-node> | grep "nvidia.com/gpu"
@@ -102,6 +108,7 @@ have `nvcr.io` and `*.nvcr.io` in the NVIDIA allow rule — this is configured i
 ```
 
 **Fix:** Verify GPU node labels match `values.gpu.nodeSelector`:
+
 ```bash
 kubectl get nodes --show-labels | grep gpu
 # Expected labels: gpu-type=nvidia-t4, workload=llm, role=gpu
@@ -114,6 +121,7 @@ kubectl get nodes --show-labels | grep gpu
 ```
 
 **Fix:** Ensure `gpu.tolerations` in values.yaml includes the GPU taint:
+
 ```yaml
 gpu:
   tolerations:
@@ -137,12 +145,14 @@ MountVolume.MountDevice failed: driver name blob.csi.azure.com not found in the 
 explicitly enabled on the cluster.
 
 **Diagnose:**
+
 ```bash
 kubectl get pods -n kube-system -l app=csi-blob-node
 # Empty = blob CSI driver not enabled
 ```
 
 **Fix (one-time):**
+
 ```bash
 az aks update \
   --resource-group rg-qwen-ephemeral-dev \
@@ -175,6 +185,7 @@ regardless of `nodeStageSecretRef`.
 have `nodeStageSecretRef` set AND `clientID` must be absent from `volumeAttributes`.
 
 Create the secret (once per cluster):
+
 ```bash
 STORAGE_KEY=$(az storage account keys list \
   --resource-group rg-qwen-persistent-dev \
@@ -204,6 +215,7 @@ The Azure Firewall blocks this CDN by default.
 **Fix:** The firewall rule `allow-dockerhub-blob-cdn` in
 `terraform/layer2-ephemeral/modules/networking/firewall-rules.tf` must include
 `production.cloudflare.docker.com`. Apply with:
+
 ```bash
 cd terraform/layer2-ephemeral
 terraform apply -target=module.networking -auto-approve
@@ -229,13 +241,16 @@ Our model is uploaded flat to the blob container (not in HF cache format), so th
 approach cannot work offline regardless.
 
 **Fix:** Pass the local blob mount path directly as `--model`:
+
 ```
 --model=/mnt/models/qwen2.5-7b-instruct-awq
 ```
+
 When a local filesystem path is passed, vLLM skips all Hub interactions and reads
 `config.json` directly from disk. This is how the chart is now configured.
 
 Verify the current pod args:
+
 ```bash
 kubectl get pod -n gpu-inference <pod-name> \
   -o jsonpath='{.spec.containers[0].args}' | python3 -m json.tool
@@ -249,6 +264,7 @@ OSError: [Errno 2] No such file or directory: '/mnt/models/qwen2.5-7b-instruct-a
 ```
 
 **Diagnose:**
+
 ```bash
 # Verify blobs exist in the container
 az storage blob list \
@@ -263,6 +279,7 @@ kubectl exec -n gpu-inference <pod-name> -- ls /mnt/models/qwen2.5-7b-instruct-a
 ```
 
 **Fix:** If blobs are missing, re-run the upload script:
+
 ```bash
 bash scripts/upload-model.sh
 ```
@@ -274,6 +291,7 @@ torch.cuda.OutOfMemoryError: CUDA out of memory
 ```
 
 **Fix:**
+
 ```yaml
 # gitops/envs/dev/qwen-values.yaml
 model:
@@ -288,6 +306,7 @@ model:
 ### 503 Service Unavailable
 
 Pod is running but readiness probe hasn't passed (model still loading).
+
 ```bash
 kubectl get pod -n gpu-inference <pod-name> \
   -o jsonpath='{.status.containerStatuses[0].ready}'
@@ -305,6 +324,7 @@ kubectl logs -n oauth2-proxy -l app.kubernetes.io/name=oauth2-proxy | tail -20
 ```
 
 **Fix:** Create the secret (see `docs/runbooks/oauth2-proxy-aad-setup.md`):
+
 ```bash
 kubectl create secret generic oauth2-proxy-creds \
   -n oauth2-proxy \
@@ -316,6 +336,7 @@ kubectl rollout restart deployment/oauth2-proxy -n oauth2-proxy
 
 For `aks-qwen-dev`, the AAD app is `qwen-aks-dev-oauth2`
 (client ID `<oauth2-client-id>`). Retrieve a new client secret via:
+
 ```bash
 az ad app credential reset \
   --id <oauth2-client-id> \
@@ -326,6 +347,7 @@ az ad app credential reset \
 ### 504 Gateway Timeout on long completions
 
 **Fix:** Verify ingress has 600s timeouts:
+
 ```bash
 kubectl get ingress qwen-api -n gpu-inference -o yaml | grep timeout
 # Expected: proxy-read-timeout: "600", proxy-send-timeout: "600"
@@ -358,6 +380,7 @@ spec.persistentvolumesource: Forbidden: spec.persistentvolumesource is immutable
 ```
 
 **Fix:** Delete the PV and PVC so ArgoCD can recreate them from the updated template:
+
 ```bash
 # Remove finalizers first to allow immediate deletion
 kubectl patch pvc qwen-api-models -n gpu-inference -p '{"metadata":{"finalizers":null}}'
@@ -379,10 +402,12 @@ its sync options. Use plain `argocd app sync <app>` instead.
 ## Symptom: Very slow first-token latency
 
 Expected on T4 (NC4as_T4_v3) with AWQ 4-bit:
+
 - Time-to-first-token: 2–5 s for 1K-token prompt
 - Generation speed: 30–60 tokens/s
 
 **Tuning:**
+
 ```yaml
 model:
   gpuMemoryUtilization: 0.92

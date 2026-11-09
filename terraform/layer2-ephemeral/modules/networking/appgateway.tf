@@ -24,6 +24,7 @@ resource "azurerm_public_ip" "appgw" {
 resource "azurerm_application_gateway" "this" {
   # checkov:skip=CKV_AZURE_120:WAF mode is optional for dev; enable WAF_v2 SKU for production
   # checkov:skip=CKV_AZURE_217:SSL policy override applied below (TLSv1_2 minimum)
+  # checkov:skip=CKV_AZURE_218:Predefined AppGwSslPolicy20220101 enforces TLSv1_2 minimum; checkov only recognises Custom/CustomV2 policies
   name                = "agw-${var.name_prefix}-${var.environment}"
   resource_group_name = var.resource_group_name
   location            = var.location

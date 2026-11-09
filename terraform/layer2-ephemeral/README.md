@@ -53,6 +53,7 @@ cp terraform.tfvars.example terraform.tfvars
 ```
 
 Edit `terraform.tfvars` and fill in:
+
 - `subscription_id` and `tenant_id`
 - `admin_group_object_ids` — AAD group for `kubectl` admin access
 - `grafana_admin_group_object_id` — AAD group for Grafana UI access
