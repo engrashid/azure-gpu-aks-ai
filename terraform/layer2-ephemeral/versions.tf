@@ -4,7 +4,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 4.0"
+      version = "~> 5.13"
     }
     random = {
       source  = "hashicorp/random"
@@ -12,15 +12,15 @@ terraform {
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 2.17"
+      version = "~> 3.3"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.35"
+      version = "~> 3.5"
     }
     kubectl = {
       source  = "alekc/kubectl"
-      version = "~> 2.1"
+      version = "~> 3.0"
     }
     azuread = {
       source  = "hashicorp/azuread"
