@@ -19,6 +19,12 @@ updates:
       interval: weekly
     commit-message:
       prefix: build
+    # Major provider upgrades (e.g. azurerm 4→5, helm 2→3) contain breaking
+    # changes, must update every module's versions.tf and need a real
+    # plan/apply test — they are done manually, not by Dependabot.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       terraform-providers:
         patterns: ["*"]
